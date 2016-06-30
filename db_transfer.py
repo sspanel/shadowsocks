@@ -21,7 +21,7 @@ class DbTransfer(object):
 
 	def update_all_user(self, dt_transfer):
 		import cymysql
-		query_head = 'UPDATE user'
+		query_head = 'UPDATE member'
 		query_sub_when = ''
 		query_sub_when2 = ''
 		query_sub_in = None
@@ -29,17 +29,17 @@ class DbTransfer(object):
 		for id in dt_transfer.keys():
 			if dt_transfer[id][0] == 0 and dt_transfer[id][1] == 0:
 				continue
-			query_sub_when += ' WHEN %s THEN u+%s' % (id, dt_transfer[id][0])
-			query_sub_when2 += ' WHEN %s THEN d+%s' % (id, dt_transfer[id][1])
+			query_sub_when += ' WHEN %s THEN flow_up+%s' % (id, dt_transfer[id][0])
+			query_sub_when2 += ' WHEN %s THEN flow_down+%s' % (id, dt_transfer[id][1])
 			if query_sub_in is not None:
 				query_sub_in += ',%s' % id
 			else:
 				query_sub_in = '%s' % id
 		if query_sub_when == '':
 			return
-		query_sql = query_head + ' SET u = CASE port' + query_sub_when + \
-					' END, d = CASE port' + query_sub_when2 + \
-					' END, t = ' + str(int(last_time)) + \
+		query_sql = query_head + ' SET flow_up = CASE port' + query_sub_when + \
+					' END, flow_down = CASE port' + query_sub_when2 + \
+					' END, lastConnTime = ' + str(int(last_time)) + \
 					' WHERE port IN (%s)' % query_sub_in
 		#print query_sql
 		conn = cymysql.connect(host=get_config().MYSQL_HOST, port=get_config().MYSQL_PORT, user=get_config().MYSQL_USER,
@@ -85,11 +85,12 @@ class DbTransfer(object):
 			switchrule = importloader.load('switchrule')
 			keys = switchrule.getKeys()
 		except Exception as e:
-			keys = ['port', 'u', 'd', 'transfer_enable', 'passwd', 'enable' ]
+			keys = ['port', 'flow_up', 'flow_down', 'transfer', 'sspwd', 'enable' ]
 		conn = cymysql.connect(host=get_config().MYSQL_HOST, port=get_config().MYSQL_PORT, user=get_config().MYSQL_USER,
 								passwd=get_config().MYSQL_PASS, db=get_config().MYSQL_DB, charset='utf8')
 		cur = conn.cursor()
-		cur.execute("SELECT " + ','.join(keys) + " FROM user")
+		#cur.execute("SELECT " + ','.join(keys) + " FROM member")
+		cur.execute("SELECT " + ','.join(keys) + " enable FROM member WHERE plan = 'Z'")
 		rows = []
 		for r in cur.fetchall():
 			d = {}
@@ -119,12 +120,12 @@ class DbTransfer(object):
 		new_servers = {}
 		for row in rows:
 			try:
-				allow = switchrule.isTurnOn(row) and row['enable'] == 1 and row['u'] + row['d'] < row['transfer_enable']
+				allow = switchrule.isTurnOn(row) and row['enable'] == 1 and row['flow_up'] + row['flow_down'] < row['transfer']
 			except Exception as e:
 				allow = False
 
 			port = row['port']
-			passwd = common.to_bytes(row['passwd'])
+			passwd = common.to_bytes(row['sspwd'])
 			cfg = {'password': passwd}
 
 			read_config_keys = ['method', 'obfs', 'protocol', 'forbidden_ip', 'forbidden_port']
